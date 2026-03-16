@@ -15,8 +15,16 @@ use ratatui::text::Text;
 use crate::event::{AppEvent, EventHandler};
 use crate::render::render_markdown;
 use crate::scroll::Viewport;
+use crate::search::SearchState;
 use crate::theme::Theme;
 use crate::ui;
+
+#[derive(PartialEq)]
+pub enum AppMode {
+    Normal,
+    Search,
+    Help,
+}
 
 pub struct App {
     pub rendered: Text<'static>,
@@ -24,6 +32,8 @@ pub struct App {
     pub theme: Theme,
     pub file_path: PathBuf,
     pub should_quit: bool,
+    pub mode: AppMode,
+    pub search: SearchState,
     pending_g: bool,
 }
 
@@ -41,11 +51,21 @@ impl App {
             theme,
             file_path,
             should_quit: false,
+            mode: AppMode::Normal,
+            search: SearchState::new(),
             pending_g: false,
         }
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        match self.mode {
+            AppMode::Search => self.handle_search_key(key),
+            AppMode::Help => self.handle_help_key(key),
+            AppMode::Normal => self.handle_normal_key(key),
+        }
+    }
+
+    fn handle_normal_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -85,11 +105,82 @@ impl App {
             KeyCode::Home => self.viewport.go_top(),
             KeyCode::End => self.viewport.go_bottom(),
 
+            // Search
+            KeyCode::Char('/') => {
+                self.mode = AppMode::Search;
+                self.search.start_search();
+            }
+            KeyCode::Char('n') => {
+                self.search.next_match();
+                self.scroll_to_current_match();
+            }
+            KeyCode::Char('N') => {
+                self.search.prev_match();
+                self.scroll_to_current_match();
+            }
+
+            // Help
+            KeyCode::Char('?') => {
+                self.mode = AppMode::Help;
+            }
+
+            // Clear search
+            KeyCode::Esc => {
+                self.search.clear_search();
+            }
+
             _ => {}
         }
 
         if key.code != KeyCode::Char('g') {
             self.pending_g = false;
+        }
+    }
+
+    fn handle_search_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.search.cancel_search();
+                self.mode = AppMode::Normal;
+            }
+            KeyCode::Enter => {
+                self.search.confirm_search();
+                self.search.find_matches(&self.rendered);
+                self.mode = AppMode::Normal;
+                self.scroll_to_current_match();
+            }
+            KeyCode::Backspace => {
+                self.search.input.pop();
+                // Live search
+                self.search.find_matches(&self.rendered);
+            }
+            KeyCode::Char(c) => {
+                self.search.input.push(c);
+                // Live search
+                self.search.find_matches(&self.rendered);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_help_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                self.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+    }
+
+    fn scroll_to_current_match(&mut self) {
+        if let Some(line) = self.search.current_match_line() {
+            let line = line as u16;
+            if line < self.viewport.offset || line >= self.viewport.offset + self.viewport.height {
+                // Center the match in viewport
+                self.viewport.offset = line.saturating_sub(self.viewport.height / 2);
+                let max = self.viewport.content_height.saturating_sub(self.viewport.height);
+                self.viewport.offset = self.viewport.offset.min(max);
+            }
         }
     }
 
@@ -104,6 +195,9 @@ impl App {
     pub fn re_render(&mut self, content: &str, width: u16) {
         self.rendered = render_markdown(content, width.saturating_sub(4), &self.theme);
         self.viewport.content_height = self.rendered.lines.len() as u16;
+        if !self.search.query.is_empty() {
+            self.search.find_matches(&self.rendered);
+        }
     }
 }
 

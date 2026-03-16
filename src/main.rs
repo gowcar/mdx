@@ -1,41 +1,88 @@
 mod app;
+mod config;
 mod event;
 mod render;
 mod scroll;
+mod search;
 mod theme;
 mod ui;
 mod widgets;
 
 use std::fs;
+use std::io::{self, Read};
 use std::path::PathBuf;
 
 use clap::Parser;
 
+use config::Config;
+
 #[derive(Parser)]
 #[command(name = "mdx", version, about = "A beautiful terminal markdown viewer")]
 struct Cli {
-    /// Markdown file to view
-    file: PathBuf,
+    /// Markdown file to view (reads from stdin if not specified)
+    file: Option<PathBuf>,
 
     /// Theme name (catppuccin, dracula, nord, tokyo-night)
-    #[arg(long, default_value = "catppuccin")]
-    theme: String,
+    #[arg(long)]
+    theme: Option<String>,
+
+    /// Initialize default config file
+    #[arg(long)]
+    init_config: bool,
+
+    /// Show config file path
+    #[arg(long)]
+    config_path: bool,
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    let content = match fs::read_to_string(&cli.file) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("Error: Failed to read {}: {}", cli.file.display(), e);
+    if cli.init_config {
+        if let Err(e) = Config::init_config() {
+            eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        return;
+    }
+
+    if cli.config_path {
+        println!("{}", Config::config_path().display());
+        return;
+    }
+
+    let (content, file_path) = if let Some(ref file) = cli.file {
+        let c = match fs::read_to_string(file) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Error: Failed to read {}: {}", file.display(), e);
+                std::process::exit(1);
+            }
+        };
+        (c, file.clone())
+    } else {
+        // Try reading from stdin
+        let is_tty = atty_check();
+        if is_tty {
+            eprintln!("Error: No file specified. Usage: mdx <file.md>");
+            eprintln!("       Or pipe content: echo '# Hello' | mdx");
+            std::process::exit(1);
+        }
+        let mut buf = String::new();
+        io::stdin().read_to_string(&mut buf).unwrap_or_default();
+        (buf, PathBuf::from("stdin"))
     };
 
-    let theme = theme::Theme::by_name(&cli.theme);
-    if let Err(e) = app::run(content, cli.file, theme) {
+    let config = Config::load();
+    let theme_name = cli.theme.unwrap_or(config.general.theme.clone());
+    let theme = theme::Theme::by_name(&theme_name);
+
+    if let Err(e) = app::run(content, file_path, theme) {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
+}
+
+fn atty_check() -> bool {
+    std::io::IsTerminal::is_terminal(&io::stdin())
 }
