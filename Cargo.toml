@@ -15,6 +15,7 @@ unicode-width = "0.2"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 dirs = "6"
+libc = "0.2"
 
 [profile.release]
 opt-level = 3

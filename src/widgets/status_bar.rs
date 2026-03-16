@@ -13,6 +13,8 @@ pub struct StatusBar<'a> {
     percentage: u16,
     theme_name: &'a str,
     theme: &'a Theme,
+    search_info: Option<&'a str>,
+    pending_key: Option<&'a str>,
 }
 
 impl<'a> StatusBar<'a> {
@@ -31,7 +33,23 @@ impl<'a> StatusBar<'a> {
             percentage,
             theme_name,
             theme,
+            search_info: None,
+            pending_key: None,
         }
+    }
+
+    pub fn search_info(mut self, info: &'a str) -> Self {
+        if !info.is_empty() {
+            self.search_info = Some(info);
+        }
+        self
+    }
+
+    pub fn pending_key(mut self, key: &'a str) -> Self {
+        if !key.is_empty() {
+            self.pending_key = Some(key);
+        }
+        self
     }
 
     fn render_progress_bar(&self, width: usize) -> String {
@@ -48,19 +66,21 @@ impl Widget for StatusBar<'_> {
         let accent = self.theme.status_bar_accent;
         let base_style = Style::default().fg(fg).bg(bg);
         let accent_style = Style::default().fg(accent).bg(bg);
-        let dim_style = Style::default()
-            .fg(self.theme.text_dim)
-            .bg(bg);
+        let dim_style = Style::default().fg(self.theme.text_dim).bg(bg);
         let sep = Span::styled(" │ ", dim_style);
 
-        // Get current time
-        let now = chrono_lite_time();
-
+        let now = local_time();
         let progress_bar = self.render_progress_bar(10);
 
-        let spans = vec![
+        let mut spans = vec![
             Span::styled(" 📄 ", accent_style),
-            Span::styled(self.filename, Style::default().fg(fg).bg(bg).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                self.filename,
+                Style::default()
+                    .fg(fg)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ),
             sep.clone(),
             Span::styled("📍 ", accent_style),
             Span::styled(
@@ -75,14 +95,31 @@ impl Widget for StatusBar<'_> {
             sep.clone(),
             Span::styled("🎨 ", accent_style),
             Span::styled(self.theme_name, base_style),
-            sep.clone(),
-            Span::styled("↑↓", accent_style),
-            Span::styled(" j/k  ", dim_style),
-            Span::styled("/", accent_style),
-            Span::styled("🔍  ", dim_style),
-            Span::styled("?", accent_style),
-            Span::styled("❓ ", dim_style),
         ];
+
+        // Show search info or key hints
+        if let Some(info) = self.search_info {
+            spans.push(sep.clone());
+            spans.push(Span::styled("🔍 ", accent_style));
+            spans.push(Span::styled(info, base_style));
+        } else if let Some(key) = self.pending_key {
+            spans.push(sep.clone());
+            spans.push(Span::styled(
+                format!("{}_ ", key),
+                Style::default()
+                    .fg(self.theme.search_current_bg)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        } else {
+            spans.push(sep.clone());
+            spans.push(Span::styled("↑↓", accent_style));
+            spans.push(Span::styled(" j/k  ", dim_style));
+            spans.push(Span::styled("/", accent_style));
+            spans.push(Span::styled("🔍  ", dim_style));
+            spans.push(Span::styled("?", accent_style));
+            spans.push(Span::styled("❓ ", dim_style));
+        }
 
         // Fill background
         for x in area.x..area.x + area.width {
@@ -90,22 +127,55 @@ impl Widget for StatusBar<'_> {
             buf[(x, area.y)].set_char(' ');
         }
 
-        // Render spans
         let line = Line::from(spans);
         buf.set_line(area.x, area.y, &line, area.width);
     }
 }
 
-/// Simple time without chrono dependency
-fn chrono_lite_time() -> String {
+fn local_time() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    // UTC+8 for convenience (can be made configurable later)
-    let local_secs = secs + 8 * 3600;
+    // Use local timezone offset
+    // Simple approach: get offset from environment or default to system
+    let offset_secs = local_utc_offset_secs();
+    let local_secs = (secs as i64 + offset_secs) as u64;
     let hours = (local_secs / 3600) % 24;
     let minutes = (local_secs / 60) % 60;
     format!("{:02}:{:02}", hours, minutes)
+}
+
+fn local_utc_offset_secs() -> i64 {
+    // Try to detect local timezone offset
+    // On Unix, we can check TZ or use libc localtime
+    // Simple fallback: check common env vars
+    if let Ok(tz) = std::env::var("TZ_OFFSET") {
+        if let Ok(hours) = tz.parse::<i64>() {
+            return hours * 3600;
+        }
+    }
+    // Default: try to detect from system
+    // Use a simple heuristic based on current time comparison
+    #[cfg(unix)]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        // Use libc to get local time offset
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        unsafe {
+            let time_t = now as libc::time_t;
+            let mut tm: libc::tm = std::mem::zeroed();
+            libc::localtime_r(&time_t, &mut tm);
+            tm.tm_gmtoff
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        0 // UTC fallback
+    }
 }

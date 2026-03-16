@@ -34,7 +34,7 @@ pub struct App {
     pub should_quit: bool,
     pub mode: AppMode,
     pub search: SearchState,
-    pending_g: bool,
+    pub pending_g: bool,
 }
 
 impl App {

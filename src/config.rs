@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 #[derive(Deserialize, Default)]
+#[allow(dead_code)]
 pub struct Config {
     #[serde(default)]
     pub general: GeneralConfig,
@@ -16,6 +17,7 @@ pub struct Config {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct GeneralConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -30,6 +32,7 @@ pub struct GeneralConfig {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct DisplayConfig {
     #[serde(default)]
     pub line_numbers_in_code: bool,
@@ -42,6 +45,7 @@ pub struct DisplayConfig {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct StatusBarConfig {
     #[serde(default = "default_true")]
     pub show_time: bool,
@@ -58,6 +62,7 @@ pub struct StatusBarConfig {
 }
 
 #[derive(Deserialize, Default)]
+#[allow(dead_code)]
 pub struct KeybindingsConfig {
     #[serde(default)]
     pub quit: Option<Vec<String>>,

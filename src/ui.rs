@@ -49,6 +49,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         .and_then(|n| n.to_str())
         .unwrap_or("stdin");
 
+    let search_info = app.search.match_info();
+    let pending = if app.pending_g { "g" } else { "" };
+
     let status_bar = StatusBar::new(
         filename,
         app.viewport.current_line(),
@@ -56,7 +59,9 @@ pub fn draw(f: &mut Frame, app: &App) {
         app.viewport.percentage(),
         &app.theme.name,
         &app.theme,
-    );
+    )
+    .search_info(&search_info)
+    .pending_key(pending);
     f.render_widget(status_bar, status_area);
 
     // Overlays

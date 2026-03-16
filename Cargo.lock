@@ -553,6 +553,7 @@ dependencies = [
  "comrak",
  "crossterm",
  "dirs",
+ "libc",
  "ratatui",
  "serde",
  "syntect",

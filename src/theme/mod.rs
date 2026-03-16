@@ -5,6 +5,7 @@ pub use gradient::gradient_spans;
 use ratatui::style::Color;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct Theme {
     pub name: String,
     pub h1_gradient: (Color, Color),
