@@ -1,10 +1,24 @@
+use std::sync::OnceLock;
+
 use comrak::nodes::{AstNode, ListType, NodeCode, NodeCodeBlock, NodeHeading, NodeList, NodeValue};
 use comrak::{parse_document, Arena, Options};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 use unicode_width::UnicodeWidthStr;
 
 use crate::theme::{self, Theme};
+
+fn syntax_set() -> &'static SyntaxSet {
+    static SS: OnceLock<SyntaxSet> = OnceLock::new();
+    SS.get_or_init(SyntaxSet::load_defaults_newlines)
+}
+
+fn theme_set() -> &'static ThemeSet {
+    static TS: OnceLock<ThemeSet> = OnceLock::new();
+    TS.get_or_init(ThemeSet::load_defaults)
+}
 
 /// Render markdown string into ratatui Text for display
 pub fn render_markdown(source: &str, width: u16, theme: &Theme) -> Text<'static> {
@@ -345,11 +359,9 @@ fn render_code_block(
 
 fn highlight_code(code: &str, lang: &str, _theme: &Theme) -> Vec<Vec<Span<'static>>> {
     use syntect::easy::HighlightLines;
-    use syntect::highlighting::ThemeSet;
-    use syntect::parsing::SyntaxSet;
 
-    let ss = SyntaxSet::load_defaults_newlines();
-    let ts = ThemeSet::load_defaults();
+    let ss = syntax_set();
+    let ts = theme_set();
     let syntax = ss
         .find_syntax_by_token(lang)
         .unwrap_or_else(|| ss.find_syntax_plain_text());

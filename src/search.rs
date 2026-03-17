@@ -103,17 +103,31 @@ impl SearchState {
         for (line_idx, line) in text.lines.iter().enumerate() {
             let line_text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
             let line_lower = line_text.to_lowercase();
+            let query_char_len = query_lower.chars().count();
 
-            let mut search_from = 0;
-            while let Some(pos) = line_lower[search_from..].find(&query_lower) {
-                let start = search_from + pos;
-                let end = start + query.len();
-                self.matches.push(SearchMatch {
-                    line: line_idx,
-                    start,
-                    end,
-                });
-                search_from = start + 1;
+            // Build byte-offset to char-index mapping
+            let byte_to_char: Vec<usize> = line_lower
+                .char_indices()
+                .map(|(_, _)| 0)
+                .collect::<Vec<_>>();
+            let _ = byte_to_char;
+
+            let chars: Vec<char> = line_lower.chars().collect();
+            let char_count = chars.len();
+
+            // Search by char index to avoid byte/char mismatch
+            for i in 0..char_count {
+                if i + query_char_len > char_count {
+                    break;
+                }
+                let window: String = chars[i..i + query_char_len].iter().collect();
+                if window == query_lower {
+                    self.matches.push(SearchMatch {
+                        line: line_idx,
+                        start: i,
+                        end: i + query_char_len,
+                    });
+                }
             }
         }
     }
