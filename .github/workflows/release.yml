@@ -67,6 +67,15 @@ jobs:
             mdx-${{ matrix.target }}.tar.gz
             mdx-${{ matrix.target }}.zip
 
+  publish-crate:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
   update-homebrew:
     needs: build
     runs-on: ubuntu-latest
