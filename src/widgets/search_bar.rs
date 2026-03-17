@@ -3,6 +3,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Widget;
+use unicode_width::UnicodeWidthStr;
 
 use crate::theme::Theme;
 
@@ -38,11 +39,11 @@ impl Widget for SearchBar<'_> {
         }
 
         if area.height >= 3 {
-            // Top border
+            // Top border: ╭─ Search ─────────╮
             let top_label = " Search ";
-            let remaining = area.width as usize - top_label.len() - 4;
+            let remaining = (area.width as usize).saturating_sub(top_label.width() + 3); // 3 = ╭ + ─ + ╮
             let top = format!(
-                "┌─{}{}┐",
+                "╭─{}{}╮",
                 top_label,
                 "─".repeat(remaining)
             );
@@ -66,15 +67,15 @@ impl Widget for SearchBar<'_> {
             buf[(right_x, area.y + 1)].set_char('│');
             buf[(right_x, area.y + 1)].set_style(Style::default().fg(border_color).bg(bg));
 
-            // Bottom border with match info
+            // Bottom border with match info: ╰──────── 1/3 ╯
             let info_part = if self.match_info.is_empty() {
                 String::new()
             } else {
                 format!(" {} ", self.match_info)
             };
-            let bottom_remaining = area.width as usize - info_part.len() - 2;
+            let bottom_remaining = (area.width as usize).saturating_sub(info_part.width() + 2); // 2 = ╰ + ╯
             let bottom = format!(
-                "└{}{}┘",
+                "╰{}{}╯",
                 "─".repeat(bottom_remaining),
                 info_part
             );
