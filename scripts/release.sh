@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:?Usage: ./scripts/release.sh 0.1.3}"
+# Get current version from Cargo.toml
+CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
 
-# Strip leading 'v' if provided
-VERSION="${VERSION#v}"
+if [ -n "${1:-}" ]; then
+  # Specific version provided
+  VERSION="${1#v}"
+else
+  # Auto-increment patch version: 0.1.3 -> 0.1.4
+  IFS='.' read -r major minor patch <<< "$CURRENT"
+  VERSION="${major}.${minor}.$((patch + 1))"
+fi
+
+# Confirm
+read -rp "Release: v${CURRENT} -> v${VERSION}, continue? [Y/n] " confirm
+if [[ "${confirm:-Y}" =~ ^[Nn] ]]; then
+  echo "Aborted."
+  exit 0
+fi
 
 # 1. Check working directory is clean
 if [ -n "$(git status --porcelain)" ]; then
