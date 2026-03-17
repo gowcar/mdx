@@ -1,6 +1,6 @@
 [package]
 name = "mdx-cli"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "A fast, beautiful terminal markdown viewer with gradient headings, syntax highlighting, and 8 themes"
 license = "MIT"
