@@ -1,9 +1,18 @@
 [package]
-name = "mdx"
+name = "mdx-cli"
 version = "0.1.0"
 edition = "2024"
-description = "A beautiful terminal markdown viewer"
+description = "A fast, beautiful terminal markdown viewer with gradient headings, syntax highlighting, and 8 themes"
 license = "MIT"
+repository = "https://github.com/gowcar/mdx"
+homepage = "https://github.com/gowcar/mdx"
+keywords = ["markdown", "terminal", "viewer", "tui", "cli"]
+categories = ["command-line-utilities", "text-processing"]
+readme = "README.md"
+
+[[bin]]
+name = "mdx"
+path = "src/main.rs"
 
 [dependencies]
 ratatui = { version = "0.29", features = ["crossterm"] }
@@ -16,6 +25,9 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 dirs = "6"
 libc = "0.2"
+base64 = "0.22"
+notify = "7"
+notify-debouncer-mini = "0.5"
 
 [profile.release]
 opt-level = 3

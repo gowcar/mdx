@@ -1,108 +1,50 @@
-# mdx
+<p align="center">
+  <h1 align="center">mdx</h1>
+  <p align="center">A fast, beautiful terminal markdown viewer.</p>
+</p>
 
-A **beautiful** terminal markdown viewer built with Rust.
+<p align="center">
+  <a href="https://github.com/gowcar/mdx/releases"><img src="https://img.shields.io/github/v/release/gowcar/mdx?style=flat-square&color=bd93f9" alt="Release"></a>
+  <a href="https://crates.io/crates/mdx-cli"><img src="https://img.shields.io/crates/v/mdx-cli?style=flat-square&color=ff79c6" alt="Crates.io"></a>
+  <a href="https://github.com/gowcar/mdx/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gowcar/mdx?style=flat-square&color=50fa7b" alt="License"></a>
+</p>
 
-Fast. Fancy. Amazing.
-
-## Features
-
-- **Gradient headings** — H1/H2 with per-character color interpolation
-- **Rounded code blocks** — with syntect syntax highlighting (100+ languages)
-- **Modern tables** — with zebra stripe rows and auto column width
-- **Block quotes** — with colored left border
-- **Full search** — `/` to search, `n`/`N` to navigate, live incremental matching
-- **Vim keybindings** — `j`/`k`/`gg`/`G`/`f`/`b`/`Ctrl-d`/`Ctrl-u`
-- **Mouse support** — scroll with trackpad/mouse wheel
-- **4 built-in themes** — Catppuccin, Dracula, Nord, Tokyo Night
-- **Configurable** — `~/.config/mdx/config.toml`
-- **Tiny binary** — ~4MB statically linked
+<p align="center">
+  <img src="demo.gif" alt="mdx demo" width="720">
+</p>
 
 ## Install
 
-### From source
-
 ```bash
-cargo install --path .
-```
+# Homebrew
+brew install gowcar/tap/mdx
 
-### From GitHub Releases
+# Cargo
+cargo install mdx-cli
 
-```bash
-# macOS (Apple Silicon)
-curl -fsSL https://github.com/USER/mdx/releases/latest/download/mdx-aarch64-apple-darwin.tar.gz | tar xz
-sudo mv mdx /usr/local/bin/
-
-# macOS (Intel)
-curl -fsSL https://github.com/USER/mdx/releases/latest/download/mdx-x86_64-apple-darwin.tar.gz | tar xz
-sudo mv mdx /usr/local/bin/
-
-# Linux
-curl -fsSL https://github.com/USER/mdx/releases/latest/download/mdx-x86_64-unknown-linux-gnu.tar.gz | tar xz
-sudo mv mdx /usr/local/bin/
+# One-line install (macOS & Linux)
+curl -fsSL https://raw.githubusercontent.com/gowcar/mdx/main/install.sh | sh
 ```
 
 ## Usage
 
 ```bash
 mdx README.md
-mdx --theme dracula README.md
-echo '# Hello' | mdx
 ```
 
-## Keybindings
+## Features
 
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Scroll down |
-| `k` / `↑` | Scroll up |
-| `Ctrl-d` / `Ctrl-u` | Half page down/up |
-| `f` / `Space` | Full page down |
-| `b` | Full page up |
-| `g g` | Go to top |
-| `G` | Go to bottom |
-| `/` | Search |
-| `n` / `N` | Next / previous match |
-| `Esc` | Clear search |
-| `?` | Toggle help |
-| `q` | Quit |
-| Mouse wheel | Scroll |
-| `Shift` + drag | Select text (terminal native) |
+- **Instant launch** — native Rust, starts in milliseconds
+- **8 built-in themes** — Dracula, Catppuccin, Nord, Tokyo Night, and more. Press `t` to cycle
+- **Custom themes** — fully configurable via `~/.config/mdx/config.toml`
+- **Syntax highlighting** — 100+ languages
+- **Smart tables** — auto-resize columns, Unicode-aware alignment
+- **Vim keybindings** — `j/k`, `gg/G`, `/` search, `n/N` navigate
+- **Mouse support** — scroll, drag-select, copy (works in tmux)
+- **Hot reload** — edit your file, mdx updates instantly
 
-## Configuration
-
-```bash
-mdx --init-config    # Create default config
-mdx --config-path    # Show config location
-```
-
-Config file: `~/.config/mdx/config.toml`
-
-```toml
-[general]
-theme = "catppuccin"   # catppuccin, dracula, nord, tokyo-night
-mouse = true
-
-[keybindings]
-quit = ["q", "Ctrl-c"]
-scroll_up = ["k", "Up"]
-scroll_down = ["j", "Down"]
-full_page_down = ["f", "Ctrl-f", "Space"]
-full_page_up = ["b", "Ctrl-b"]
-```
-
-## Themes
-
-- **Catppuccin Mocha** (default) — warm and cozy
-- **Dracula** — purple and pink
-- **Nord** — cool blue and green
-- **Tokyo Night** — deep blue and purple
-
-Switch with `--theme`:
-
-```bash
-mdx --theme dracula README.md
-```
+See [User Guide](docs/user-guide.md) for more details.
 
 ## License
 
-MIT
+[MIT](LICENSE)

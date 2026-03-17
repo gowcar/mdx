@@ -52,15 +52,6 @@ fn render_node<'a>(
                         true,
                     );
                     lines.push(Line::from(spans));
-                    let sep_width = (width as usize).min(heading_text.width() + 10).max(20);
-                    let sep: String = "━".repeat(sep_width);
-                    let sep_spans = theme::gradient_spans(
-                        &sep,
-                        theme.h1_gradient.0,
-                        theme.h1_gradient.1,
-                        false,
-                    );
-                    lines.push(Line::from(sep_spans));
                 }
                 2 => {
                     let spans = theme::gradient_spans(
@@ -70,43 +61,33 @@ fn render_node<'a>(
                         true,
                     );
                     lines.push(Line::from(spans));
-                    let sep_width = (width as usize / 2).min(heading_text.width() + 6).max(10);
-                    let sep: String = "─ ".repeat(sep_width / 2);
-                    lines.push(Line::from(Span::styled(
-                        sep,
-                        Style::default().fg(theme.h1_separator),
-                    )));
                 }
                 3 => {
-                    let prefix = Span::styled(
-                        "### ",
-                        Style::default()
-                            .fg(theme.h3_color)
-                            .add_modifier(Modifier::BOLD),
-                    );
                     let text = Span::styled(
                         heading_text,
                         Style::default()
                             .fg(theme.h3_color)
                             .add_modifier(Modifier::BOLD),
                     );
-                    lines.push(Line::from(vec![prefix, text]));
+                    lines.push(Line::from(vec![text]));
+                }
+                4 => {
+                    let text = Span::styled(
+                        heading_text,
+                        Style::default()
+                            .fg(theme.h4_color)
+                            .add_modifier(Modifier::BOLD),
+                    );
+                    lines.push(Line::from(vec![text]));
                 }
                 _ => {
-                    let marker = "#".repeat(lvl);
-                    let prefix = Span::styled(
-                        format!("{} ", marker),
-                        Style::default()
-                            .fg(theme.h4_color)
-                            .add_modifier(Modifier::BOLD),
-                    );
                     let text = Span::styled(
                         heading_text,
                         Style::default()
                             .fg(theme.h4_color)
-                            .add_modifier(Modifier::BOLD),
+                            .add_modifier(Modifier::ITALIC | Modifier::BOLD),
                     );
-                    lines.push(Line::from(vec![prefix, text]));
+                    lines.push(Line::from(vec![text]));
                 }
             }
             lines.push(Line::default());
@@ -135,20 +116,7 @@ fn render_node<'a>(
         }
         NodeValue::ThematicBreak => {
             let w = (width as usize).min(60);
-            let mut hr_text = String::new();
-            for i in 0..w {
-                let mid = w / 2;
-                let dist = if i > mid { i - mid } else { mid - i };
-                if dist < w / 6 {
-                    hr_text.push('━');
-                } else if dist < w / 3 {
-                    hr_text.push('─');
-                } else if i % 2 == 0 {
-                    hr_text.push('─');
-                } else {
-                    hr_text.push(' ');
-                }
-            }
+            let hr_text = theme.hr_char.repeat(w);
             lines.push(Line::from(Span::styled(
                 hr_text,
                 Style::default().fg(theme.hr),
@@ -156,7 +124,7 @@ fn render_node<'a>(
             lines.push(Line::default());
         }
         NodeValue::Table(..) => {
-            render_table(node, lines, theme);
+            render_table(node, lines, width, theme);
             lines.push(Line::default());
         }
         NodeValue::SoftBreak | NodeValue::LineBreak => {}
@@ -300,16 +268,20 @@ fn render_code_block(
         .add_modifier(Modifier::BOLD);
     let bg = theme.code_bg;
 
-    // Top border: ╭─── lang ───────╮
-    let remaining = box_width.saturating_sub(8 + lang.len());
-    let top_rest = "─".repeat(remaining);
-
-    let top_spans = vec![
-        Span::styled("  ╭─── ", border_style),
-        Span::styled(lang.to_string(), label_style),
-        Span::styled(format!(" {}╮", top_rest), border_style),
-    ];
-    lines.push(Line::from(top_spans));
+    // Top border: ╭─── lang ───────╮  or  ╭────────────────╮
+    if lang.is_empty() {
+        let fill = "─".repeat(box_width.saturating_sub(2));
+        lines.push(Line::from(Span::styled(format!("  ╭{}╮", fill), border_style)));
+    } else {
+        let remaining = box_width.saturating_sub(7 + lang.len());
+        let top_rest = "─".repeat(remaining);
+        let top_spans = vec![
+            Span::styled("  ╭─── ", border_style),
+            Span::styled(lang.to_string(), label_style),
+            Span::styled(format!(" {}╮", top_rest), border_style),
+        ];
+        lines.push(Line::from(top_spans));
+    }
 
     // Empty line after top border
     let empty_pad = " ".repeat(box_width.saturating_sub(4));
@@ -319,18 +291,42 @@ fn render_code_block(
         Span::styled(" │", border_style),
     ]));
 
-    // Code lines
+    // Code lines — clip content to box_width
+    let inner_width = box_width.saturating_sub(4); // content area between "│ " and " │"
     for code_spans in &highlighted {
         let mut line_spans: Vec<Span<'static>> = vec![Span::styled("  │ ", border_style)];
-        let mut content_width: usize = 0;
+        let mut used: usize = 0;
+        let mut clipped = false;
         for span in code_spans {
-            content_width += span.content.width();
-            line_spans.push(Span::styled(span.content.to_string(), span.style.bg(bg)));
+            let span_w = span.content.width();
+            if used + span_w <= inner_width {
+                line_spans.push(Span::styled(span.content.to_string(), span.style.bg(bg)));
+                used += span_w;
+            } else {
+                // Clip this span to fit
+                let remaining = inner_width.saturating_sub(used + 1); // reserve 1 for "…"
+                let mut partial = String::new();
+                let mut pw = 0;
+                for ch in span.content.chars() {
+                    let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+                    if pw + cw > remaining {
+                        break;
+                    }
+                    partial.push(ch);
+                    pw += cw;
+                }
+                partial.push('…');
+                used += pw + 1;
+                line_spans.push(Span::styled(partial, span.style.bg(bg)));
+                clipped = true;
+                break;
+            }
         }
-        let padding = box_width.saturating_sub(content_width + 4);
+        let padding = inner_width.saturating_sub(used);
         if padding > 0 {
             line_spans.push(Span::styled(" ".repeat(padding), Style::default().bg(bg)));
         }
+        let _ = clipped;
         line_spans.push(Span::styled(" │", border_style));
         lines.push(Line::from(line_spans));
     }
@@ -343,7 +339,7 @@ fn render_code_block(
     ]));
 
     // Bottom border: ╰───────────────╯
-    let bottom = format!("  ╰{}╯", "─".repeat(box_width.saturating_sub(4)));
+    let bottom = format!("  ╰{}╯", "─".repeat(box_width.saturating_sub(2)));
     lines.push(Line::from(Span::styled(bottom, border_style)));
 }
 
@@ -391,8 +387,25 @@ fn render_list<'a>(
 
     for child in node.children() {
         let child_val = child.data.borrow().value.clone();
-        if let NodeValue::Item(_) = &child_val {
-            let marker = if list.list_type == ListType::Ordered {
+        // Handle both Item and TaskItem
+        let task_check = match &child_val {
+            NodeValue::TaskItem(ch) => *ch,
+            _ => None,
+        };
+        let is_list_item = matches!(&child_val, NodeValue::Item(_) | NodeValue::TaskItem(_));
+        if is_list_item {
+            let marker = if let Some(ch) = task_check {
+                // Task list item: ☑ or ☐
+                let (icon, color) = if ch == 'x' || ch == 'X' {
+                    ("✓ ", theme.task_done)
+                } else {
+                    ("○ ", theme.task_pending)
+                };
+                Span::styled(
+                    format!("{}{}", indent, icon),
+                    Style::default().fg(color),
+                )
+            } else if list.list_type == ListType::Ordered {
                 let m = format!("{}. ", index);
                 index += 1;
                 Span::styled(
@@ -400,11 +413,8 @@ fn render_list<'a>(
                     Style::default().fg(theme.list_marker),
                 )
             } else {
-                let bullet = match depth {
-                    0 => "●",
-                    1 => "○",
-                    _ => "■",
-                };
+                let markers = theme.list_markers;
+                let bullet = markers[depth.min(markers.len() - 1)];
                 Span::styled(
                     format!("{}{} ", indent, bullet),
                     Style::default().fg(theme.list_marker),
@@ -456,7 +466,7 @@ fn render_blockquote<'a>(
     theme: &Theme,
     depth: usize,
 ) {
-    let border_char = "▌ ";
+    let border_char = format!("{} ", theme.blockquote_char);
 
     let mut inner_lines: Vec<Line<'static>> = Vec::new();
     for child in node.children() {
@@ -475,7 +485,7 @@ fn render_blockquote<'a>(
     for inner_line in inner_lines {
         let mut spans: Vec<Span<'static>> = vec![
             Span::styled("  ".repeat(depth), Style::default()),
-            Span::styled(border_char, Style::default().fg(border_color)),
+            Span::styled(border_char.clone(), Style::default().fg(border_color)),
         ];
         spans.extend(inner_line.spans.into_iter().map(|s| {
             if depth == 0 {
@@ -491,9 +501,43 @@ fn render_blockquote<'a>(
     }
 }
 
+/// Pad a string to `target_width` display columns using unicode width.
+/// If the string is wider than target_width, truncate with "…".
+fn pad_cell(text: &str, target_width: usize) -> String {
+    let display_width = text.width();
+    if display_width <= target_width {
+        // Pad with spaces to fill remaining width
+        let padding = target_width - display_width;
+        format!("{}{}", text, " ".repeat(padding))
+    } else {
+        // Truncate: find the longest prefix that fits in (target_width - 1) then add "…"
+        if target_width <= 1 {
+            return "…".to_string();
+        }
+        let mut width = 0;
+        let mut result = String::new();
+        for ch in text.chars() {
+            let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+            if width + cw > target_width - 1 {
+                break;
+            }
+            result.push(ch);
+            width += cw;
+        }
+        // Pad if we stopped at an odd width (CJK char didn't fit)
+        while width < target_width - 1 {
+            result.push(' ');
+            width += 1;
+        }
+        result.push('…');
+        result
+    }
+}
+
 fn render_table<'a>(
     node: &'a AstNode<'a>,
     lines: &mut Vec<Line<'static>>,
+    width: u16,
     theme: &Theme,
 ) {
     let mut rows: Vec<Vec<String>> = Vec::new();
@@ -518,6 +562,8 @@ fn render_table<'a>(
     }
 
     let num_cols = rows.iter().map(|r| r.len()).max().unwrap_or(0);
+
+    // Calculate natural column widths using unicode display width
     let mut col_widths: Vec<usize> = vec![0; num_cols];
     for row in &rows {
         for (i, cell) in row.iter().enumerate() {
@@ -527,7 +573,56 @@ fn render_table<'a>(
         }
     }
 
+    // Ensure minimum column width of 3 (enough for "…" + padding)
+    for w in &mut col_widths {
+        *w = (*w).max(3);
+    }
+
     let indent = "  ";
+    let indent_width = 2usize;
+    // Total width = indent + │ + (padding + content + padding + │) * num_cols
+    // = indent_width + 1 + sum(col_width + 3) for each col
+    // = indent_width + 1 + num_cols * 3 + sum(col_widths)
+    let border_overhead = indent_width + 1 + num_cols * 3; // "  │" + " cell │" per col
+    let available_width = width as usize;
+
+    let total_natural = border_overhead + col_widths.iter().sum::<usize>();
+
+    if total_natural > available_width && available_width > border_overhead {
+        // Need to shrink columns to fit
+        let available_for_content = available_width - border_overhead;
+        let total_content: usize = col_widths.iter().sum();
+
+        if total_content > 0 {
+            // Proportionally shrink, but keep minimum width of 3
+            let mut new_widths: Vec<usize> = col_widths
+                .iter()
+                .map(|&w| {
+                    let scaled = (w * available_for_content) / total_content;
+                    scaled.max(3)
+                })
+                .collect();
+
+            // Adjust if total still exceeds (due to minimum widths)
+            let mut new_total: usize = new_widths.iter().sum();
+            if new_total > available_for_content {
+                // Shrink largest columns first
+                let mut sorted_indices: Vec<usize> = (0..num_cols).collect();
+                sorted_indices.sort_by(|&a, &b| new_widths[b].cmp(&new_widths[a]));
+                for &idx in &sorted_indices {
+                    if new_total <= available_for_content {
+                        break;
+                    }
+                    let reduce = (new_total - available_for_content).min(new_widths[idx] - 3);
+                    new_widths[idx] -= reduce;
+                    new_total -= reduce;
+                }
+            }
+
+            col_widths = new_widths;
+        }
+    }
+
     let border_style = Style::default().fg(theme.table_border);
     let header_style = Style::default()
         .fg(theme.text)
@@ -558,13 +653,13 @@ fn render_table<'a>(
         let mut spans: Vec<Span<'static>> =
             vec![Span::styled(format!("{}│", indent), border_style)];
         for (i, cell) in row.iter().enumerate() {
-            let w = col_widths.get(i).copied().unwrap_or(0);
-            let padded = format!(" {:width$} ", cell, width = w);
+            let w = col_widths.get(i).copied().unwrap_or(3);
+            let padded = format!(" {} ", pad_cell(cell, w));
             spans.push(Span::styled(padded, style));
             spans.push(Span::styled("│", border_style));
         }
         for i in row.len()..num_cols {
-            let w = col_widths.get(i).copied().unwrap_or(0);
+            let w = col_widths.get(i).copied().unwrap_or(3);
             spans.push(Span::styled(" ".repeat(w + 2), style));
             spans.push(Span::styled("│", border_style));
         }

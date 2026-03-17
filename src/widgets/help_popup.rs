@@ -27,11 +27,12 @@ const HELP_ENTRIES: &[(&str, &str)] = &[
     ("G", "Go to bottom"),
     ("/", "Search"),
     ("n / N", "Next / prev match"),
-    ("Esc", "Clear search"),
+    ("t / T", "Next / prev theme"),
+    ("Esc", "Clear search / selection"),
+    ("Mouse drag", "Select text"),
+    ("y", "Copy selection"),
     ("q / Ctrl-c", "Quit"),
-    ("?", "Toggle help"),
-    ("Mouse wheel", "Scroll"),
-    ("Shift+drag", "Select text"),
+    ("? / h", "Toggle help"),
 ];
 
 impl Widget for HelpPopup<'_> {

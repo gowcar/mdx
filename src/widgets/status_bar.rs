@@ -13,6 +13,7 @@ pub struct StatusBar<'a> {
     percentage: u16,
     theme_name: &'a str,
     theme: &'a Theme,
+    nerd_font: bool,
     search_info: Option<&'a str>,
     pending_key: Option<&'a str>,
 }
@@ -25,6 +26,7 @@ impl<'a> StatusBar<'a> {
         percentage: u16,
         theme_name: &'a str,
         theme: &'a Theme,
+        nerd_font: bool,
     ) -> Self {
         Self {
             filename,
@@ -33,6 +35,7 @@ impl<'a> StatusBar<'a> {
             percentage,
             theme_name,
             theme,
+            nerd_font,
             search_info: None,
             pending_key: None,
         }
@@ -72,8 +75,10 @@ impl Widget for StatusBar<'_> {
         let now = local_time();
         let progress_bar = self.render_progress_bar(10);
 
+        let icon = self.theme.icon(self.nerd_font);
+
         let mut spans = vec![
-            Span::styled(" 📄 ", accent_style),
+            Span::styled(format!(" {} ", icon), accent_style),
             Span::styled(
                 self.filename,
                 Style::default()
@@ -82,7 +87,7 @@ impl Widget for StatusBar<'_> {
                     .add_modifier(Modifier::BOLD),
             ),
             sep.clone(),
-            Span::styled("📍 ", accent_style),
+            Span::styled(" ", accent_style),
             Span::styled(
                 format!("{}/{}", self.current_line, self.total_lines),
                 base_style,
@@ -91,16 +96,16 @@ impl Widget for StatusBar<'_> {
             Span::styled(format!("{} ", progress_bar), accent_style),
             Span::styled(format!("{}%", self.percentage), base_style),
             sep.clone(),
-            Span::styled(format!("🕐 {}", now), base_style),
+            Span::styled(format!(" {}", now), base_style),
             sep.clone(),
-            Span::styled("🎨 ", accent_style),
+            Span::styled(" ", accent_style),
             Span::styled(self.theme_name, base_style),
         ];
 
         // Show search info or key hints
         if let Some(info) = self.search_info {
             spans.push(sep.clone());
-            spans.push(Span::styled("🔍 ", accent_style));
+            spans.push(Span::styled(" ", accent_style));
             spans.push(Span::styled(info, base_style));
         } else if let Some(key) = self.pending_key {
             spans.push(sep.clone());
@@ -113,12 +118,9 @@ impl Widget for StatusBar<'_> {
             ));
         } else {
             spans.push(sep.clone());
-            spans.push(Span::styled("↑↓", accent_style));
             spans.push(Span::styled(" j/k  ", dim_style));
-            spans.push(Span::styled("/", accent_style));
-            spans.push(Span::styled("🔍  ", dim_style));
-            spans.push(Span::styled("?", accent_style));
-            spans.push(Span::styled("❓ ", dim_style));
+            spans.push(Span::styled(" /  ", accent_style));
+            spans.push(Span::styled(" ?", accent_style));
         }
 
         // Fill background

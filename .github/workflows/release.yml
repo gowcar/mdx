@@ -22,6 +22,10 @@ jobs:
             os: macos-latest
           - target: aarch64-apple-darwin
             os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,13 +46,23 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-      - name: Package
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           cd target/${{ matrix.target }}/release
           tar czf ../../../mdx-${{ matrix.target }}.tar.gz mdx
           cd ../../..
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../mdx-${{ matrix.target }}.zip mdx.exe
+          cd ../../..
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: mdx-${{ matrix.target }}.tar.gz
+          files: |
+            mdx-${{ matrix.target }}.tar.gz
+            mdx-${{ matrix.target }}.zip

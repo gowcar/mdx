@@ -4,8 +4,10 @@ mod event;
 mod render;
 mod scroll;
 mod search;
+mod selection;
 mod theme;
 mod ui;
+mod watcher;
 mod widgets;
 
 use std::fs;
@@ -22,7 +24,7 @@ struct Cli {
     /// Markdown file to view (reads from stdin if not specified)
     file: Option<PathBuf>,
 
-    /// Theme name (catppuccin, dracula, nord, tokyo-night)
+    /// Theme: dracula, catppuccin, nord, tokyo-night, gruvbox, solarized, one-dark, monokai
     #[arg(long)]
     theme: Option<String>,
 
@@ -74,7 +76,18 @@ fn main() {
     };
 
     let config = Config::load();
-    let theme_name = cli.theme.unwrap_or(config.general.theme.clone());
+
+    // Set nerd_font env for detection if configured explicitly
+    match config.general.nerd_font.as_str() {
+        "true" => unsafe { std::env::set_var("MDX_NERD_FONT", "1") },
+        "false" => unsafe { std::env::set_var("MDX_NERD_FONT", "0") },
+        _ => {} // "auto" - let has_nerd_font() detect
+    }
+
+    // Priority: CLI flag > last saved theme > config file
+    let theme_name = cli.theme
+        .or_else(Config::load_last_theme)
+        .unwrap_or(config.general.theme.clone());
     let theme = theme::Theme::by_name(&theme_name);
 
     if let Err(e) = app::run(content, file_path, theme) {

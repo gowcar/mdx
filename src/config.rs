@@ -29,6 +29,8 @@ pub struct GeneralConfig {
     pub max_width: u16,
     #[serde(default = "default_padding")]
     pub padding: u16,
+    #[serde(default = "default_nerd_font")]
+    pub nerd_font: String,  // "auto", "true", "false"
 }
 
 #[derive(Deserialize)]
@@ -93,7 +95,7 @@ pub struct KeybindingsConfig {
 }
 
 fn default_theme() -> String {
-    "catppuccin".to_string()
+    "dracula".to_string()
 }
 fn default_true() -> bool {
     true
@@ -107,6 +109,9 @@ fn default_padding() -> u16 {
 fn default_time_format() -> String {
     "%H:%M".to_string()
 }
+fn default_nerd_font() -> String {
+    "auto".to_string()
+}
 fn default_progress_style() -> String {
     "both".to_string()
 }
@@ -119,6 +124,7 @@ impl Default for GeneralConfig {
             wrap: true,
             max_width: default_max_width(),
             padding: default_padding(),
+            nerd_font: default_nerd_font(),
         }
     }
 }
@@ -181,6 +187,19 @@ impl Config {
         Self::config_dir().join("config.toml")
     }
 
+    /// Load the user's last chosen theme (from ~/.config/mdx/last_theme)
+    pub fn load_last_theme() -> Option<String> {
+        let path = Self::config_dir().join("last_theme");
+        fs::read_to_string(path).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+    }
+
+    /// Save the user's theme choice
+    pub fn save_last_theme(name: &str) {
+        let dir = Self::config_dir();
+        let _ = fs::create_dir_all(&dir);
+        let _ = fs::write(dir.join("last_theme"), name);
+    }
+
     pub fn init_config() -> std::io::Result<()> {
         let dir = Self::config_dir();
         fs::create_dir_all(&dir)?;
@@ -196,9 +215,12 @@ impl Config {
 }
 
 const DEFAULT_CONFIG: &str = r#"[general]
-theme = "catppuccin"
+# Available: catppuccin, dracula, nord, tokyo-night, gruvbox, solarized, one-dark, monokai
+# Press t/T in viewer to cycle themes
+theme = "dracula"
 mouse = true
 wrap = true
+nerd_font = "auto"   # "auto" | "true" | "false" — auto detects Kitty/WezTerm/Alacritty
 max_width = 120
 padding = 2
 
