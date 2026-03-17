@@ -104,9 +104,11 @@ impl Widget for HelpPopup<'_> {
             }
         }
 
-        // Bottom border
+        // Bottom border with version
         let bottom_y = area.y + area.height - 1;
-        let bottom = format!("╰{}╯", "─".repeat(inner_width));
+        let version = format!(" mdx v{} ", env!("CARGO_PKG_VERSION"));
+        let bottom_remaining = inner_width.saturating_sub(version.len());
+        let bottom = format!("╰{}{}╯", "─".repeat(bottom_remaining), version);
         buf.set_line(
             area.x,
             bottom_y,

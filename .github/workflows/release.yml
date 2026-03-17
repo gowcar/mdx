@@ -66,3 +66,35 @@ jobs:
           files: |
             mdx-${{ matrix.target }}.tar.gz
             mdx-${{ matrix.target }}.zip
+
+  update-homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gowcar/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin" "aarch64-unknown-linux-gnu" "x86_64-unknown-linux-gnu")
+
+          for target in "${TARGETS[@]}"; do
+            URL="https://github.com/gowcar/mdx/releases/download/${GITHUB_REF_NAME}/mdx-${target}.tar.gz"
+            SHA=$(curl -sL "$URL" | sha256sum | cut -d' ' -f1)
+            # Update sha256 for this target
+            sed -i "/${target}/{ n; s/sha256 \".*\"/sha256 \"${SHA}\"/; }" Formula/mdx.rb
+          done
+
+          # Update version
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" Formula/mdx.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add Formula/mdx.rb
+          git commit -m "Update mdx formula to ${GITHUB_REF_NAME}"
+          git push
