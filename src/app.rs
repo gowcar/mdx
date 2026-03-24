@@ -298,6 +298,11 @@ impl App {
                     }
                 }
             }
+            MouseEventKind::Down(MouseButton::Right) => {
+                if self.selection.has_selection() {
+                    self.copy_selection();
+                }
+            }
             _ => {}
         }
     }
