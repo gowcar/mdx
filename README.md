@@ -42,8 +42,22 @@ mdx README.md
 - **Vim keybindings** — `j/k`, `gg/G`, `/` search, `n/N` navigate
 - **Mouse support** — scroll, drag-select, copy (works in tmux)
 - **Hot reload** — edit your file, mdx updates instantly
+- **Yazi integration** — one-command setup as yazi's markdown previewer
 
 See [User Guide](docs/user-guide.md) for more details.
+
+## Yazi Preview
+
+Use mdx to render markdown in [yazi](https://yazi-rs.github.io/)'s preview pane:
+
+```bash
+mdx --setup-yazi
+```
+
+This installs the mdx previewer plugin and configures yazi automatically. Navigate to any `.md` file in yazi to see it in action.
+
+<!-- TODO: add yazi preview screenshot here -->
+
 
 ## License
 

@@ -7,6 +7,7 @@
 - [Keybindings](#keybindings)
 - [Themes](#themes)
 - [Configuration](#configuration)
+- [Integrations](#integrations)
 - [Dotfiles Management with Stow](#dotfiles-management-with-stow)
 - [Terminal Setup](#terminal-setup)
 - [Tips & Best Practices](#tips--best-practices)
@@ -344,15 +345,89 @@ curl -s https://api.github.com/repos/gowcar/mdx | jq -r .body | mdx
 cat CHANGELOG.md | mdx
 ```
 
+---
+
+## Integrations
+
 ### Yazi Integration
 
-Use mdx as the default markdown opener in [yazi](https://yazi-rs.github.io/):
+mdx can serve as [yazi](https://yazi-rs.github.io/)'s markdown previewer, rendering styled markdown directly in the preview pane.
+
+#### One-command setup
+
+```bash
+mdx --setup-yazi
+```
+
+This will:
+1. Install the `mdx.yazi` previewer plugin to `~/.config/yazi/plugins/mdx.yazi/`
+2. Add the previewer config to `~/.config/yazi/yazi.toml`
+
+After setup, navigate to any `.md` file in yazi — the preview pane will show rendered markdown with full styling (colors, code highlighting, tables, etc.).
+
+#### Manual setup
+
+If you prefer to configure manually:
+
+```lua
+-- ~/.config/yazi/plugins/mdx.yazi/init.lua
+local M = {}
+
+function M:peek(job)
+    local child = Command("mdx")
+        :args({ "--raw", "-w", tostring(job.area.w), tostring(job.file.url) })
+        :stdout(Command.PIPED)
+        :stderr(Command.PIPED)
+        :spawn()
+    if not child then return end
+
+    local output = child:wait_with_output()
+    if not output or not output.status or not output.status.success then return end
+
+    local lines = {}
+    for line in output.stdout:gmatch("[^\n]*") do
+        table.insert(lines, ui.Line.parse(line))
+    end
+
+    local offset = job.skip or 0
+    local visible = {}
+    for i = offset + 1, math.min(#lines, offset + job.area.h) do
+        table.insert(visible, lines[i])
+    end
+    ya.preview_widgets(job, { ui.Text(visible):area(job.area) })
+end
+
+function M:seek(job)
+    local h = cx.active.current.hovered
+    if h then
+        local step = job.units > 0 and 1 or -1
+        ya.manager_emit("peek", {
+            math.max(0, cx.active.preview.skip + step),
+            only_if = h.url,
+        })
+    end
+end
+
+return M
+```
+
+```toml
+# ~/.config/yazi/yazi.toml
+[plugin]
+prepend_previewers = [
+    { mime = "text/markdown", run = "mdx" },
+]
+```
+
+#### Open with mdx (Enter key)
+
+To also open markdown files with mdx on `Enter`:
 
 ```toml
 # ~/.config/yazi/yazi.toml
 [opener]
 markdown = [
-    { run = 'mdx "$@"', block = true, desc = "Preview with mdx" },
+    { run = 'mdx "$@"', block = true, desc = "Open with mdx" },
 ]
 
 [open]
@@ -361,7 +436,17 @@ prepend_rules = [
 ]
 ```
 
-Select a `.md` file in yazi and press `Enter` to open with mdx.
+#### Raw mode
+
+The preview integration uses `--raw` mode, which outputs ANSI-styled text to stdout:
+
+```bash
+mdx --raw README.md           # render to stdout
+mdx --raw -w 60 README.md     # specify width
+cat README.md | mdx --raw     # pipe from stdin
+```
+
+This mode is also useful for integration with other tools like fzf preview.
 
 ### Hot Reload Workflow
 

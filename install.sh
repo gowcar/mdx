@@ -54,3 +54,15 @@ fi
 
 echo "mdx $LATEST installed to $INSTALL_DIR/mdx"
 echo "Run 'mdx --help' to get started"
+
+# Detect yazi and suggest integration
+if command -v yazi >/dev/null 2>&1; then
+    echo ""
+    echo "Yazi detected! Set up mdx as markdown previewer?"
+    printf "  Run: mdx --setup-yazi [Y/n] "
+    read -r REPLY
+    case "$REPLY" in
+        [nN]*) echo "Skipped. You can run 'mdx --setup-yazi' later." ;;
+        *)     mdx --setup-yazi ;;
+    esac
+fi

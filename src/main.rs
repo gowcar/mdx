@@ -5,6 +5,7 @@ mod render;
 mod scroll;
 mod search;
 mod selection;
+mod setup;
 mod theme;
 mod ui;
 mod watcher;
@@ -28,6 +29,18 @@ struct Cli {
     #[arg(long)]
     theme: Option<String>,
 
+    /// Raw mode: render to stdout (for use as previewer in yazi/fzf/etc.)
+    #[arg(long)]
+    raw: bool,
+
+    /// Render width in raw mode (defaults to terminal width or 80)
+    #[arg(short, long)]
+    width: Option<u16>,
+
+    /// Set up mdx as yazi's markdown previewer
+    #[arg(long)]
+    setup_yazi: bool,
+
     /// Initialize default config file
     #[arg(long)]
     init_config: bool,
@@ -39,6 +52,14 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
+
+    if cli.setup_yazi {
+        if let Err(e) = setup::setup_yazi() {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     if cli.init_config {
         if let Err(e) = Config::init_config() {
@@ -89,6 +110,15 @@ fn main() {
         .or_else(Config::load_last_theme)
         .unwrap_or(config.general.theme.clone());
     let theme = theme::Theme::by_name(&theme_name);
+
+    if cli.raw {
+        let width = cli.width.unwrap_or_else(|| {
+            crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80)
+        });
+        let text = render::render_markdown(&content, width, &theme);
+        print!("{}", render::text_to_ansi(&text));
+        return;
+    }
 
     if let Err(e) = app::run(content, file_path, theme) {
         eprintln!("Error: {}", e);
