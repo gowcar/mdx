@@ -7,8 +7,8 @@ const YAZI_PLUGIN_LUA: &str = r#"--- mdx previewer plugin for yazi
 local M = {}
 
 function M:peek(job)
-    local child = Command("mdx")
-        :args({ "--raw", "-w", tostring(job.area.w), tostring(job.file.url) })
+    local child, err = Command("mdx")
+        :arg({ "--raw", "-w", tostring(job.area.w), tostring(job.file.url) })
         :stdout(Command.PIPED)
         :stderr(Command.PIPED)
         :spawn()
@@ -17,34 +17,34 @@ function M:peek(job)
         return
     end
 
-    local output = child:wait_with_output()
-    if not output or not output.status or not output.status.success then
-        return
-    end
+    local limit = job.area.h
+    local i, lines = 0, ""
+    repeat
+        local next, event = child:read_line()
+        if event ~= 0 then
+            break
+        end
 
-    local lines = {}
-    for line in output.stdout:gmatch("[^\n]*") do
-        table.insert(lines, ui.Line.parse(line))
-    end
+        i = i + 1
+        if i > job.skip then
+            lines = lines .. next
+        end
+    until i >= job.skip + limit
 
-    local offset = job.skip or 0
-    local visible = {}
-    for i = offset + 1, math.min(#lines, offset + job.area.h) do
-        table.insert(visible, lines[i])
-    end
+    child:start_kill()
 
-    ya.preview_widgets(job, { ui.Text(visible):area(job.area) })
+    if job.skip > 0 and i < job.skip + limit then
+        ya.emit("peek", { math.max(0, i - limit), only_if = job.file.url, upper_bound = true })
+    else
+        ya.preview_widget(
+            { area = job.area, file = job.file, skip = job.skip },
+            ui.Text.parse(lines):area(job.area)
+        )
+    end
 end
 
 function M:seek(job)
-    local h = cx.active.current.hovered
-    if h then
-        local step = job.units > 0 and 1 or -1
-        ya.manager_emit("peek", {
-            math.max(0, cx.active.preview.skip + step),
-            only_if = h.url,
-        })
-    end
+    require("code"):seek(job)
 end
 
 return M
@@ -80,9 +80,9 @@ pub fn setup_yazi() -> Result<(), Box<dyn std::error::Error>> {
     let plugin_dir = yazi_dir.join("plugins").join("mdx.yazi");
     let yazi_toml = yazi_dir.join("yazi.toml");
 
-    // 1. Create plugin directory and write init.lua
+    // 1. Create plugin directory and write main.lua
     fs::create_dir_all(&plugin_dir)?;
-    let lua_path = plugin_dir.join("init.lua");
+    let lua_path = plugin_dir.join("main.lua");
     fs::write(&lua_path, YAZI_PLUGIN_LUA)?;
     println!("\x1b[32m✓\x1b[0m  Plugin written to {}", lua_path.display());
 
@@ -94,29 +94,34 @@ pub fn setup_yazi() -> Result<(), Box<dyn std::error::Error>> {
         String::new()
     };
 
-    let marker = r#"{ mime = "text/markdown", run = "mdx" }"#;
+    let marker = r#"run = "mdx""#;
 
     if toml_content.contains(marker) {
         println!("\x1b[32m✓\x1b[0m  yazi.toml already configured, skipping.");
     } else {
+        // Use both name and mime matching — many systems detect .md as text/plain or text/html
+        let previewer_entries = r#"    { url = "*.md", run = "mdx" },
+    { mime = "text/markdown", run = "mdx" },"#;
+
         let snippet = format!(
-            "\n[plugin]\nprepend_previewers = [\n    {{ mime = \"text/markdown\", run = \"mdx\" }},\n]\n"
+            "\n[plugin]\nprepend_previewers = [\n{}\n]\n",
+            previewer_entries
         );
 
         if toml_content.contains("[plugin]") {
             // [plugin] section exists — need to inject prepend_previewers
             if toml_content.contains("prepend_previewers") {
-                // Already has prepend_previewers array — insert our entry
+                // Already has prepend_previewers array — insert our entries
                 let new_content = toml_content.replace(
                     "prepend_previewers = [",
-                    &format!("prepend_previewers = [\n    {{ mime = \"text/markdown\", run = \"mdx\" }},"),
+                    &format!("prepend_previewers = [\n{}", previewer_entries),
                 );
                 fs::write(&yazi_toml, new_content)?;
             } else {
                 // Has [plugin] but no prepend_previewers — add after [plugin]
                 let new_content = toml_content.replace(
                     "[plugin]",
-                    "[plugin]\nprepend_previewers = [\n    { mime = \"text/markdown\", run = \"mdx\" },\n]",
+                    &format!("[plugin]\nprepend_previewers = [\n{}\n]", previewer_entries),
                 );
                 fs::write(&yazi_toml, new_content)?;
             }
