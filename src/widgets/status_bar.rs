@@ -16,6 +16,7 @@ pub struct StatusBar<'a> {
     nerd_font: bool,
     search_info: Option<&'a str>,
     pending_key: Option<&'a str>,
+    wrap_code: bool,
 }
 
 impl<'a> StatusBar<'a> {
@@ -38,6 +39,7 @@ impl<'a> StatusBar<'a> {
             nerd_font,
             search_info: None,
             pending_key: None,
+            wrap_code: false,
         }
     }
 
@@ -52,6 +54,11 @@ impl<'a> StatusBar<'a> {
         if !key.is_empty() {
             self.pending_key = Some(key);
         }
+        self
+    }
+
+    pub fn wrap_code(mut self, on: bool) -> Self {
+        self.wrap_code = on;
         self
     }
 
@@ -101,6 +108,17 @@ impl Widget for StatusBar<'_> {
             Span::styled(" ", accent_style),
             Span::styled(self.theme_name, base_style),
         ];
+
+        if self.wrap_code {
+            spans.push(sep.clone());
+            spans.push(Span::styled(
+                "WRAP",
+                Style::default()
+                    .fg(self.theme.search_current_bg)
+                    .bg(bg)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
 
         // Show search info or key hints
         if let Some(info) = self.search_info {

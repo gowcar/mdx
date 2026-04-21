@@ -43,11 +43,13 @@ pub struct App {
     pub raw_content: String,
     pub render_width: u16,
     pub nerd_font: bool,
+    pub wrap_code: bool,
 }
 
 impl App {
     pub fn new(content: &str, file_path: PathBuf, theme: Theme, width: u16) -> Self {
-        let rendered = render_markdown(content, width.saturating_sub(4), &theme);
+        let wrap_code = true;
+        let rendered = render_markdown(content, width.saturating_sub(4), &theme, wrap_code);
         let content_height = rendered.lines.len() as u16;
 
         let mut viewport = Viewport::new();
@@ -67,6 +69,7 @@ impl App {
             raw_content: content.to_string(),
             render_width: width,
             nerd_font: crate::theme::has_nerd_font(),
+            wrap_code,
         }
     }
 
@@ -156,6 +159,16 @@ impl App {
             KeyCode::Char('N') => {
                 self.search.prev_match();
                 self.scroll_to_current_match();
+            }
+
+            // Toggle code block wrap
+            KeyCode::Char('w') => {
+                self.wrap_code = !self.wrap_code;
+                self.status_message = Some(format!(
+                    "Code wrap: {}",
+                    if self.wrap_code { "on" } else { "off" }
+                ));
+                self.re_render_current();
             }
 
             // Theme cycling
@@ -315,7 +328,7 @@ impl App {
     pub fn re_render(&mut self, content: &str, width: u16) {
         self.raw_content = content.to_string();
         self.render_width = width;
-        self.rendered = render_markdown(content, width.saturating_sub(4), &self.theme);
+        self.rendered = render_markdown(content, width.saturating_sub(4), &self.theme, self.wrap_code);
         self.viewport.content_height = self.rendered.lines.len() as u16;
         if !self.search.query.is_empty() {
             self.search.find_matches(&self.rendered);

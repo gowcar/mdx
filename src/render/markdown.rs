@@ -21,7 +21,7 @@ fn theme_set() -> &'static ThemeSet {
 }
 
 /// Render markdown string into ratatui Text for display
-pub fn render_markdown(source: &str, width: u16, theme: &Theme) -> Text<'static> {
+pub fn render_markdown(source: &str, width: u16, theme: &Theme, wrap_code: bool) -> Text<'static> {
     let arena = Arena::new();
     let mut options = Options::default();
     options.extension.strikethrough = true;
@@ -31,7 +31,7 @@ pub fn render_markdown(source: &str, width: u16, theme: &Theme) -> Text<'static>
     let root = parse_document(&arena, source, &options);
     let mut lines: Vec<Line<'static>> = Vec::new();
 
-    render_node(root, &mut lines, width, theme, 0);
+    render_node(root, &mut lines, width, theme, 0, wrap_code);
 
     Text::from(lines)
 }
@@ -42,13 +42,14 @@ fn render_node<'a>(
     width: u16,
     theme: &Theme,
     depth: usize,
+    wrap_code: bool,
 ) {
     let val = node.data.borrow().value.clone();
 
     match &val {
         NodeValue::Document => {
             for child in node.children() {
-                render_node(child, lines, width, theme, depth);
+                render_node(child, lines, width, theme, depth, wrap_code);
             }
         }
         NodeValue::Heading(NodeHeading { level, .. }) => {
@@ -57,51 +58,54 @@ fn render_node<'a>(
             let heading_text = collect_text(node);
             let lvl = *level as usize;
 
+            let text_lines = wrap_plain_text(&heading_text, width as usize);
+
             match lvl {
                 1 => {
-                    let spans = theme::gradient_spans(
-                        &heading_text,
-                        theme.h1_gradient.0,
-                        theme.h1_gradient.1,
-                        true,
-                    );
-                    lines.push(Line::from(spans));
+                    for t in text_lines {
+                        let spans = theme::gradient_spans(
+                            &t,
+                            theme.h1_gradient.0,
+                            theme.h1_gradient.1,
+                            true,
+                        );
+                        lines.push(Line::from(spans));
+                    }
                 }
                 2 => {
-                    let spans = theme::gradient_spans(
-                        &heading_text,
-                        theme.h2_gradient.0,
-                        theme.h2_gradient.1,
-                        true,
-                    );
-                    lines.push(Line::from(spans));
+                    for t in text_lines {
+                        let spans = theme::gradient_spans(
+                            &t,
+                            theme.h2_gradient.0,
+                            theme.h2_gradient.1,
+                            true,
+                        );
+                        lines.push(Line::from(spans));
+                    }
                 }
                 3 => {
-                    let text = Span::styled(
-                        heading_text,
-                        Style::default()
-                            .fg(theme.h3_color)
-                            .add_modifier(Modifier::BOLD),
-                    );
-                    lines.push(Line::from(vec![text]));
+                    let style = Style::default()
+                        .fg(theme.h3_color)
+                        .add_modifier(Modifier::BOLD);
+                    for t in text_lines {
+                        lines.push(Line::from(Span::styled(t, style)));
+                    }
                 }
                 4 => {
-                    let text = Span::styled(
-                        heading_text,
-                        Style::default()
-                            .fg(theme.h4_color)
-                            .add_modifier(Modifier::BOLD),
-                    );
-                    lines.push(Line::from(vec![text]));
+                    let style = Style::default()
+                        .fg(theme.h4_color)
+                        .add_modifier(Modifier::BOLD);
+                    for t in text_lines {
+                        lines.push(Line::from(Span::styled(t, style)));
+                    }
                 }
                 _ => {
-                    let text = Span::styled(
-                        heading_text,
-                        Style::default()
-                            .fg(theme.h4_color)
-                            .add_modifier(Modifier::ITALIC | Modifier::BOLD),
-                    );
-                    lines.push(Line::from(vec![text]));
+                    let style = Style::default()
+                        .fg(theme.h4_color)
+                        .add_modifier(Modifier::ITALIC | Modifier::BOLD);
+                    for t in text_lines {
+                        lines.push(Line::from(Span::styled(t, style)));
+                    }
                 }
             }
             lines.push(Line::default());
@@ -115,18 +119,18 @@ fn render_node<'a>(
             lines.push(Line::default());
         }
         NodeValue::CodeBlock(NodeCodeBlock { info, literal, .. }) => {
-            render_code_block(lines, info, literal, width, theme);
+            render_code_block(lines, info, literal, width, theme, wrap_code);
             lines.push(Line::default());
         }
         NodeValue::List(list) => {
-            render_list(node, lines, width, theme, list, depth);
+            render_list(node, lines, width, theme, list, depth, wrap_code);
             if depth == 0 {
                 lines.push(Line::default());
             }
         }
         NodeValue::Item(_) => {}
         NodeValue::BlockQuote => {
-            render_blockquote(node, lines, width, theme, depth);
+            render_blockquote(node, lines, width, theme, depth, wrap_code);
         }
         NodeValue::ThematicBreak => {
             let w = (width as usize).min(60);
@@ -144,7 +148,7 @@ fn render_node<'a>(
         NodeValue::SoftBreak | NodeValue::LineBreak => {}
         _ => {
             for child in node.children() {
-                render_node(child, lines, width, theme, depth);
+                render_node(child, lines, width, theme, depth, wrap_code);
             }
         }
     }
@@ -265,6 +269,7 @@ fn render_code_block(
     literal: &str,
     width: u16,
     theme: &Theme,
+    wrap_code: bool,
 ) {
     let lang = info.split_whitespace().next().unwrap_or("");
     let highlighted = highlight_code(literal, lang, theme);
@@ -274,7 +279,11 @@ fn render_code_block(
         .map(|spans| spans.iter().map(|s| s.content.width()).sum::<usize>())
         .max()
         .unwrap_or(0);
-    let box_width = (content_max_width + 6).max(lang.len() + 10).min(width as usize);
+    let box_width = if wrap_code {
+        (width as usize).max(lang.len() + 10)
+    } else {
+        (content_max_width + 6).max(lang.len() + 10).min(width as usize)
+    };
 
     let border_style = Style::default().fg(theme.code_border);
     let label_style = Style::default()
@@ -305,44 +314,80 @@ fn render_code_block(
         Span::styled(" │", border_style),
     ]));
 
-    // Code lines — clip content to box_width
     let inner_width = box_width.saturating_sub(4); // content area between "│ " and " │"
+
+    let emit_row = |lines: &mut Vec<Line<'static>>,
+                    content: Vec<Span<'static>>,
+                    used: usize| {
+        let mut row: Vec<Span<'static>> = Vec::with_capacity(content.len() + 3);
+        row.push(Span::styled("  │ ", border_style));
+        row.extend(content);
+        let pad = inner_width.saturating_sub(used);
+        if pad > 0 {
+            row.push(Span::styled(" ".repeat(pad), Style::default().bg(bg)));
+        }
+        row.push(Span::styled(" │", border_style));
+        lines.push(Line::from(row));
+    };
+
     for code_spans in &highlighted {
-        let mut line_spans: Vec<Span<'static>> = vec![Span::styled("  │ ", border_style)];
-        let mut used: usize = 0;
-        let mut clipped = false;
-        for span in code_spans {
-            let span_w = span.content.width();
-            if used + span_w <= inner_width {
-                line_spans.push(Span::styled(span.content.to_string(), span.style.bg(bg)));
-                used += span_w;
-            } else {
-                // Clip this span to fit
-                let remaining = inner_width.saturating_sub(used + 1); // reserve 1 for "…"
-                let mut partial = String::new();
-                let mut pw = 0;
+        if wrap_code {
+            // Wrap spans across multiple box rows
+            let mut current: Vec<Span<'static>> = Vec::new();
+            let mut used: usize = 0;
+            for span in code_spans {
+                let style = span.style.bg(bg);
+                let mut chunk = String::new();
+                let mut chunk_w: usize = 0;
                 for ch in span.content.chars() {
                     let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
-                    if pw + cw > remaining {
-                        break;
+                    if used + chunk_w + cw > inner_width {
+                        if !chunk.is_empty() {
+                            current.push(Span::styled(std::mem::take(&mut chunk), style));
+                            used += chunk_w;
+                            chunk_w = 0;
+                        }
+                        emit_row(lines, std::mem::take(&mut current), used);
+                        used = 0;
                     }
-                    partial.push(ch);
-                    pw += cw;
+                    chunk.push(ch);
+                    chunk_w += cw;
                 }
-                partial.push('…');
-                used += pw + 1;
-                line_spans.push(Span::styled(partial, span.style.bg(bg)));
-                clipped = true;
-                break;
+                if !chunk.is_empty() {
+                    current.push(Span::styled(chunk, style));
+                    used += chunk_w;
+                }
             }
+            emit_row(lines, current, used);
+        } else {
+            // Truncate: clip content to inner_width with "…"
+            let mut content: Vec<Span<'static>> = Vec::new();
+            let mut used: usize = 0;
+            for span in code_spans {
+                let span_w = span.content.width();
+                if used + span_w <= inner_width {
+                    content.push(Span::styled(span.content.to_string(), span.style.bg(bg)));
+                    used += span_w;
+                } else {
+                    let remaining = inner_width.saturating_sub(used + 1);
+                    let mut partial = String::new();
+                    let mut pw = 0;
+                    for ch in span.content.chars() {
+                        let cw = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(0);
+                        if pw + cw > remaining {
+                            break;
+                        }
+                        partial.push(ch);
+                        pw += cw;
+                    }
+                    partial.push('…');
+                    used += pw + 1;
+                    content.push(Span::styled(partial, span.style.bg(bg)));
+                    break;
+                }
+            }
+            emit_row(lines, content, used);
         }
-        let padding = inner_width.saturating_sub(used);
-        if padding > 0 {
-            line_spans.push(Span::styled(" ".repeat(padding), Style::default().bg(bg)));
-        }
-        let _ = clipped;
-        line_spans.push(Span::styled(" │", border_style));
-        lines.push(Line::from(line_spans));
     }
 
     // Empty line before bottom border
@@ -393,6 +438,7 @@ fn render_list<'a>(
     theme: &Theme,
     list: &NodeList,
     depth: usize,
+    wrap_code: bool,
 ) {
     let indent = "  ".repeat(depth + 1);
     let mut index = list.start;
@@ -433,8 +479,24 @@ fn render_list<'a>(
                 )
             };
 
+            let marker_text: String = marker.content.to_string();
+            let marker_width = marker_text.width();
+            let cont_indent = " ".repeat(marker_width);
+
             let mut item_spans: Vec<Span<'static>> = vec![marker];
+            let mut first_indent: String = String::new();
             let mut is_first = true;
+            let flush = |spans: Vec<Span<'static>>,
+                         lines: &mut Vec<Line<'static>>,
+                         first_ind: &str,
+                         cont_ind: &str| {
+                for line in
+                    wrap_spans_indented(spans, width as usize, first_ind, cont_ind)
+                {
+                    lines.push(line);
+                }
+            };
+
             for item_child in child.children() {
                 let item_val = item_child.data.borrow().value.clone();
                 match &item_val {
@@ -443,20 +505,27 @@ fn render_list<'a>(
                         if is_first {
                             item_spans.extend(para_spans);
                         } else {
-                            let cont_indent = "  ".repeat(depth + 2);
-                            let mut indented: Vec<Span<'static>> = vec![Span::raw(cont_indent)];
-                            indented.extend(para_spans);
-                            lines.push(Line::from(item_spans));
-                            item_spans = indented;
+                            flush(
+                                std::mem::take(&mut item_spans),
+                                lines,
+                                &first_indent,
+                                &cont_indent,
+                            );
+                            item_spans = para_spans;
+                            first_indent = cont_indent.clone();
                         }
                         is_first = false;
                     }
                     NodeValue::List(sub_list) => {
                         if !item_spans.is_empty() {
-                            lines.push(Line::from(item_spans));
-                            item_spans = Vec::new();
+                            flush(
+                                std::mem::take(&mut item_spans),
+                                lines,
+                                &first_indent,
+                                &cont_indent,
+                            );
                         }
-                        render_list(item_child, lines, width, theme, sub_list, depth + 1);
+                        render_list(item_child, lines, width, theme, sub_list, depth + 1, wrap_code);
                     }
                     _ => {
                         let inner_spans = collect_inline_spans(item_child, theme);
@@ -465,7 +534,7 @@ fn render_list<'a>(
                 }
             }
             if !item_spans.is_empty() {
-                lines.push(Line::from(item_spans));
+                flush(item_spans, lines, &first_indent, &cont_indent);
             }
         }
     }
@@ -477,6 +546,7 @@ fn render_blockquote<'a>(
     width: u16,
     theme: &Theme,
     depth: usize,
+    wrap_code: bool,
 ) {
     let border_char = format!("{} ", theme.blockquote_char);
 
@@ -488,6 +558,7 @@ fn render_blockquote<'a>(
             width.saturating_sub(3),
             theme,
             depth + 1,
+            wrap_code,
         );
     }
 
@@ -703,69 +774,100 @@ fn render_table<'a>(
 }
 
 fn wrap_spans(spans: Vec<Span<'static>>, max_width: usize) -> Vec<Line<'static>> {
+    wrap_spans_indented(spans, max_width, "  ", "  ")
+}
+
+fn wrap_spans_indented(
+    spans: Vec<Span<'static>>,
+    max_width: usize,
+    first_indent: &str,
+    cont_indent: &str,
+) -> Vec<Line<'static>> {
     if max_width == 0 {
         return vec![Line::from(spans)];
     }
 
+    let first_indent_width = first_indent.width();
+    let cont_indent_width = cont_indent.width();
+
     let mut result: Vec<Line<'static>> = Vec::new();
     let mut current_line: Vec<Span<'static>> = Vec::new();
     let mut current_width: usize = 0;
+    let mut on_first_line = true;
 
-    let padding = "  ";
-    let effective_width = max_width.saturating_sub(2);
+    let start_line = |line: &mut Vec<Span<'static>>, width: &mut usize, on_first: bool| {
+        line.clear();
+        let indent = if on_first { first_indent } else { cont_indent };
+        if !indent.is_empty() {
+            line.push(Span::raw(indent.to_string()));
+        }
+        *width = 0;
+    };
+
+    let effective = |on_first: bool| {
+        let reserved = if on_first {
+            first_indent_width
+        } else {
+            cont_indent_width
+        };
+        max_width.saturating_sub(reserved)
+    };
+
+    start_line(&mut current_line, &mut current_width, on_first_line);
 
     for span in spans {
         let text = span.content.to_string();
         let style = span.style;
 
-        if current_width + text.width() <= effective_width {
-            if current_line.is_empty() {
-                current_line.push(Span::raw(padding.to_string()));
-            }
+        if current_width + text.width() <= effective(on_first_line) {
             current_width += text.width();
             current_line.push(Span::styled(text, style));
-        } else {
-            let mut remaining = text.as_str();
-            while !remaining.is_empty() {
-                let available = effective_width.saturating_sub(current_width);
-                if available == 0 {
-                    result.push(Line::from(current_line));
-                    current_line = vec![Span::raw(padding.to_string())];
-                    current_width = 0;
-                    continue;
-                }
+            continue;
+        }
 
-                if remaining.width() <= available {
-                    current_line.push(Span::styled(remaining.to_string(), style));
-                    current_width += remaining.width();
-                    break;
-                }
+        let mut remaining = text.as_str();
+        while !remaining.is_empty() {
+            let available = effective(on_first_line).saturating_sub(current_width);
+            if available == 0 {
+                result.push(Line::from(std::mem::take(&mut current_line)));
+                on_first_line = false;
+                start_line(&mut current_line, &mut current_width, on_first_line);
+                continue;
+            }
 
-                let split = find_split_point(remaining, available);
-                if split == 0 && current_width == 0 {
-                    let (first, rest) = split_at_width(remaining, available);
-                    current_line.push(Span::styled(first.to_string(), style));
-                    result.push(Line::from(current_line));
-                    current_line = vec![Span::raw(padding.to_string())];
-                    current_width = 0;
-                    remaining = rest;
-                } else if split == 0 {
-                    result.push(Line::from(current_line));
-                    current_line = vec![Span::raw(padding.to_string())];
-                    current_width = 0;
-                } else {
-                    let (first, rest) = remaining.split_at(split);
-                    current_line.push(Span::styled(first.to_string(), style));
-                    result.push(Line::from(current_line));
-                    current_line = vec![Span::raw(padding.to_string())];
-                    current_width = 0;
-                    remaining = rest;
-                }
+            if remaining.width() <= available {
+                current_line.push(Span::styled(remaining.to_string(), style));
+                current_width += remaining.width();
+                break;
+            }
+
+            let split = find_split_point(remaining, available);
+            if split == 0 && current_width == 0 {
+                let (first, rest) = split_at_width(remaining, available);
+                current_line.push(Span::styled(first.to_string(), style));
+                result.push(Line::from(std::mem::take(&mut current_line)));
+                on_first_line = false;
+                start_line(&mut current_line, &mut current_width, on_first_line);
+                remaining = rest;
+            } else if split == 0 {
+                result.push(Line::from(std::mem::take(&mut current_line)));
+                on_first_line = false;
+                start_line(&mut current_line, &mut current_width, on_first_line);
+            } else {
+                let (first, rest) = remaining.split_at(split);
+                current_line.push(Span::styled(first.to_string(), style));
+                result.push(Line::from(std::mem::take(&mut current_line)));
+                on_first_line = false;
+                start_line(&mut current_line, &mut current_width, on_first_line);
+                remaining = rest;
             }
         }
     }
 
-    if !current_line.is_empty() {
+    let has_content = current_line
+        .iter()
+        .any(|s| !s.content.trim().is_empty() || current_line.len() > 1);
+    if has_content {
         result.push(Line::from(current_line));
     }
 
@@ -773,6 +875,34 @@ fn wrap_spans(spans: Vec<Span<'static>>, max_width: usize) -> Vec<Line<'static>>
         result.push(Line::default());
     }
 
+    result
+}
+
+fn wrap_plain_text(text: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 || text.width() <= max_width {
+        return vec![text.to_string()];
+    }
+    let mut result: Vec<String> = Vec::new();
+    let mut remaining = text;
+    while !remaining.is_empty() {
+        if remaining.width() <= max_width {
+            result.push(remaining.to_string());
+            break;
+        }
+        let split = find_split_point(remaining, max_width);
+        if split == 0 {
+            let (first, rest) = split_at_width(remaining, max_width);
+            result.push(first.to_string());
+            remaining = rest;
+        } else {
+            let (first, rest) = remaining.split_at(split);
+            result.push(first.trim_end().to_string());
+            remaining = rest.trim_start();
+        }
+    }
+    if result.is_empty() {
+        result.push(String::new());
+    }
     result
 }
 

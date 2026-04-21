@@ -88,7 +88,8 @@ pub fn draw(f: &mut Frame, app: &App) {
         app.nerd_font,
     )
     .search_info(display_info)
-    .pending_key(pending);
+    .pending_key(pending)
+    .wrap_code(app.wrap_code);
     f.render_widget(status_bar, status_area);
 
     // Overlays
@@ -100,7 +101,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             f.render_widget(search_bar, search_area);
         }
         AppMode::Help => {
-            let help_height = 18;
+            let help_height = 19;
             let help_area = centered_rect(44, help_height, content_area);
             let help = HelpPopup::new(&app.theme);
             f.render_widget(help, help_area);

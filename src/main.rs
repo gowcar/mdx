@@ -37,6 +37,10 @@ struct Cli {
     #[arg(short, long)]
     width: Option<u16>,
 
+    /// Truncate long code block lines instead of wrapping (default: wrap)
+    #[arg(long)]
+    no_wrap: bool,
+
     /// Set up mdx as yazi's markdown previewer
     #[arg(long)]
     setup_yazi: bool,
@@ -115,7 +119,7 @@ fn main() {
         let width = cli.width.unwrap_or_else(|| {
             crossterm::terminal::size().map(|(w, _)| w).unwrap_or(80)
         });
-        let text = render::render_markdown(&content, width, &theme);
+        let text = render::render_markdown(&content, width, &theme, !cli.no_wrap);
         print!("{}", render::text_to_ansi(&text));
         return;
     }

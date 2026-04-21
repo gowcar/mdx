@@ -28,6 +28,7 @@ const HELP_ENTRIES: &[(&str, &str)] = &[
     ("/", "Search"),
     ("n / N", "Next / prev match"),
     ("t / T", "Next / prev theme"),
+    ("w", "Toggle code wrap"),
     ("Esc", "Clear search / selection"),
     ("Mouse drag", "Select text"),
     ("y", "Copy selection"),
